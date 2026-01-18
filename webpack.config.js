@@ -1,91 +1,92 @@
-var path = require('path');
-var webpack = require('webpack');
-var HtmlWebpackPlugin = require('html-webpack-plugin');
-var CopyWebpackPlugin = require('copy-webpack-plugin');
-var ExtractTextPlugin = require('extract-text-webpack-plugin')
+const path = require('path');
+const webpack = require('webpack');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const ExtractTextPlugin = require('extract-text-webpack-plugin');
 
-var isProd = process.env.NODE_ENV === 'production' ? true : false;
+const isProd = process.env.NODE_ENV === 'production';
 
-var config = {
-  debug: true,
+module.exports = {
+  mode: isProd ? 'production' : 'development',
   devtool: 'cheap-module-source-map',
-  entry: [
-    './src/assets/js/index.js',
-    './src/assets/css/index.scss'
-  ],
+
+  // 👇 Add entries for popup, options, background, contentScript
+  entry: {
+    main: ['./src/assets/js/index.js', './src/assets/css/index.scss'],
+    background: './src/background.js',
+    popup: './src/popup.js',
+    options: './src/options.js',
+    contentScript: './src/contentScript.js',
+  },
 
   output: {
-    path: './build',
-    filename: 'assets/js/bundle.js'
+    path: path.resolve(__dirname, 'build'),
+    filename: (pathData) => {
+      // Put your app bundle inside assets/js, keep others at root
+      return pathData.chunk.name === 'main'
+        ? 'assets/js/bundle.js'
+        : '[name].js';
+    },
   },
 
   module: {
-    loaders: [
+    rules: [
       {
         test: /\.scss$/,
-        loader: ExtractTextPlugin.extract('css!sass')
+        use: ExtractTextPlugin.extract({
+          fallback: 'style-loader',
+          use: ['css-loader', 'sass-loader'],
+        }),
       },
-      {test: /\.(woff|woff2)(\?v=\d+\.\d+\.\d+)?$/, loader: 'url?limit=10000&mimetype=application/font-woff'},
-      {test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/, loader: 'url?limit=10000&mimetype=application/octet-stream'},
-      {test: /\.eot(\?v=\d+\.\d+\.\d+)?$/, loader: 'file'},
-      {test: /\.svg(\?v=\d+\.\d+\.\d+)?$/, loader: 'url?limit=10000&mimetype=image/svg+xml'}
-    ]
+      { test: /\.(woff|woff2)(\?v=\d+\.\d+\.\d+)?$/, loader: 'url-loader?limit=10000&mimetype=application/font-woff' },
+      { test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/, loader: 'url-loader?limit=10000&mimetype=application/octet-stream' },
+      { test: /\.eot(\?v=\d+\.\d+\.\d+)?$/, loader: 'file-loader' },
+      { test: /\.svg(\?v=\d+\.\d+\.\d+)?$/, loader: 'url-loader?limit=10000&mimetype=image/svg+xml' },
+    ],
   },
 
   resolve: {
-    extensions: ['', '.js'],
+    extensions: ['.js'],
     alias: {
-      'bootstrap': path.resolve(__dirname, 'node_modules', 'bootstrap-sass', 'assets'),
-    }
+      bootstrap: path.resolve(__dirname, 'node_modules', 'bootstrap-sass', 'assets'),
+    },
   },
 
   plugins: [
-
-    // extract css into separate file
+    // Extract CSS bundle
     new ExtractTextPlugin('assets/css/bundle.css'),
 
-    // copy the chrome extension manifest
-    new CopyWebpackPlugin([
-      { from: './src/manifest.json', to: 'manifest.json' }
-    ]),
+    // 🔁 Copy updated Manifest V3, and your icons/images
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: './src/manifest.json', to: 'manifest.json' },
+        { from: './src/icons', to: 'icons' },
+        { from: './src/assets/images', to: 'assets/images' },
+      ],
+    }),
 
-    // copy the images
-    new CopyWebpackPlugin([
-      { from: './src/assets/images', to: 'assets/images' }
-    ]),
-
-    // copy the popup and settings html files
+    // 🔁 HTML pages for popup & options
     new HtmlWebpackPlugin({
       filename: 'popup.html',
       template: './src/popup.html',
+      chunks: ['popup'],
     }),
-
     new HtmlWebpackPlugin({
-      filename: 'settings.html',
-      template: './src/settings.html',
-    })
-  ]
+      filename: 'options.html',
+      template: './src/options.html',
+      chunks: ['options'],
+    }),
+  ].concat(
+    isProd
+      ? [
+          new webpack.DefinePlugin({
+            'process.env': { NODE_ENV: JSON.stringify('production') },
+          }),
+          new webpack.optimize.UglifyJsPlugin({
+            compress: { warnings: false },
+            output: { comments: false },
+          }),
+        ]
+      : []
+  ),
 };
-
-if (isProd) {
-  config.debug = false;
-
-  // set production NODE_ENV
-  config.plugins.push(
-    new webpack.DefinePlugin({
-      'process.env': {
-        'NODE_ENV': JSON.stringify('production')
-      }
-    })
-  );
-
-  // minify javascript
-  config.plugins.push(
-    new webpack.optimize.UglifyJsPlugin({
-      compress: { warnings: false },
-      output: { comments: false }
-    })
-  );
-}
-
-module.exports = config;
